@@ -10,21 +10,6 @@ from modules import UNet
 from ddpm import Diffusion
 import argparse
 
-parser = argparse.ArgumentParser(description='Train a diffusion model')
-parser.add_argument('epochs', default=12, type=int,
-                    help='number of epochs')
-parser.add_argument('device', default='cuda', type=str,
-                    help='device you want to use for training')                    
-parser.add_argument('img_size', type=int, default=250,
-                    help='image size processed by the model')
-parser.add_argument('run_name', type=str, default='sleazy_donkey',
-                    help='name of the experiment')
-parser.add_argument('lr', type=float, default=10E-3,
-                    help='learning rate')
-
-args = parser.parse_args()
-
-
 def train(args):
     setup_logging(args.run_name)
     device = args.device
@@ -57,3 +42,30 @@ def train(args):
         sampled_images = diffusion.sample(model, n=images.shape[0])
         save_images(sampled_images, os.path.join("results",args.run_name, f"{epoch}.jpg"))
         torch.save(model.state_dict(), os.path.join("models",args.run_name, f"ckpt.pt"))
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description='Train a diffusion model')
+    parser.add_argument('-epochs', default=12, type=int,
+                        help='number of epochs')
+    parser.add_argument('-batch_size', default=32, type=int,
+                        help='batch size of the model')                
+    parser.add_argument('-device', default='cuda', type=str,
+                        help='device you want to use for training')                    
+    parser.add_argument('-img_size', type=int, default=128,
+                        help='image size processed by the model')
+    parser.add_argument('-run_name', type=str, default='sleazy_donkey',
+                        help='name of the experiment')
+    parser.add_argument('-lr', type=float, default=10E-3,
+                        help='learning rate')
+    parser.add_argument('-dataset_path', type=str, default='dataset',
+                        help='dataset path')
+
+    args = parser.parse_args()
+    print(args)
+
+    train(args)
+  
+
+
+

@@ -1,7 +1,7 @@
 
 import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels, mid_channels=None, residual=False):
@@ -70,7 +70,7 @@ class SelfAttention(nn.Module):
         super(SelfAttention,self).__init__()
         self.channels = channels
         self.size = size
-        self.mha = nn.MultiheadAttention(channels, 4, bacth_first=True)
+        self.mha = nn.MultiheadAttention(channels, 4, batch_first=True)
         self.ln = nn.LayerNorm([channels])
         self.ff_self = nn.Sequential(
             nn.LayerNorm([channels]),
@@ -82,7 +82,7 @@ class SelfAttention(nn.Module):
     def forward(self, x):
         x = x.view(-1, self.channels, self.size * self.size).swapaxes(1,2)
         x_ln= self.ln(x)
-        attention_value = self.mha(x_ln, x_ln, x_ln)
+        attention_value, _ = self.mha(x_ln, x_ln, x_ln)
         attention_value = attention_value + x 
         attention_value = self.ff_self(attention_value) +  attention_value
         return attention_value.swapaxes(2,1).view(-1,self.channels, self.size, self.size)
@@ -116,7 +116,7 @@ class UNet(nn.Module):
     def pos_encoding(self, t, channels):
         inv_freq = 1.0 / (
             10000
-            ** (torch.arrange(0, channels, 2, device=self.device).float() / channels)
+            ** (torch.arange(0, channels, 2, device=self.device).float() / channels)
         )
         pos_enc_a = torch.sin(t.repeat(1, channels // 2) * inv_freq)
         pos_enc_b = torch.cos(t.repeat(1, channels // 2) * inv_freq)
@@ -127,7 +127,7 @@ class UNet(nn.Module):
         t= t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t,self.time_dim)
         
-        x1 = self.inc1(x)
+        x1 = self.inc(x)
         x2 = self.down1(x1,t)
         x2 = self.sa1(x2)
         x3 = self.down2(x2,t)

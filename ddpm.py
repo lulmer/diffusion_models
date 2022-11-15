@@ -44,7 +44,7 @@ class Diffusion(object):
             :, None, None, None
         ]
         epsilon = torch.rand_like(x)
-        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * epsilon
+        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * epsilon , epsilon
 
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
