@@ -1,3 +1,4 @@
+#%%
 import torch
 import torchvision
 from PIL import Image
@@ -19,8 +20,10 @@ def save_images(images, path, **kwargs):
     im.save(path)
 
 def get_data(args):
+
+
     transforms =  torchvision.transforms.Compose([
-        torchvision.transforms.Resize(80),
+        torchvision.transforms.Resize(args.img_size),
         torchvision.transforms.RandomResizedCrop(args.img_size, scale=(0.8,1.0)),
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))

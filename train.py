@@ -14,7 +14,7 @@ def train(args):
     setup_logging(args.run_name)
     device = args.device
     dataloader = get_data(args)
-    model = UNet().to(device)
+    model = UNet(image_size=args.img_size).to(device)
     optimizer = optim.AdamW(model.parameters(), lr = args.lr)
     mse = nn.MSELoss()
     diffusion = Diffusion(img_size=args.img_size, device=device)
@@ -39,7 +39,7 @@ def train(args):
             pbar.set_postfix(MSE=loss.item())
             logger.add_scalar("MSE", loss.item(), global_step=epoch*l+i)
         
-        sampled_images = diffusion.sample(model, n=images.shape[0])
+        sampled_images = diffusion.sample(model, n=6)
         save_images(sampled_images, os.path.join("results",args.run_name, f"{epoch}.jpg"))
         torch.save(model.state_dict(), os.path.join("models",args.run_name, f"ckpt.pt"))
 
@@ -56,10 +56,13 @@ if __name__ == "__main__":
                         help='image size processed by the model')
     parser.add_argument('-run_name', type=str, default='sleazy_donkey',
                         help='name of the experiment')
-    parser.add_argument('-lr', type=float, default=10E-3,
+    parser.add_argument('-lr', type=float, default=1.0E-3,
                         help='learning rate')
     parser.add_argument('-dataset_path', type=str, default='dataset',
                         help='dataset path')
+
+    parser.add_argument('-resume_cpkt', type=str, default='dataset',
+                        help='checkpoint path to resume training')
 
     args = parser.parse_args()
     print(args)

@@ -1,9 +1,11 @@
+#%%
 import os
 import torch
 import torch.nn as nn
 from torch import optim
 from tqdm import tqdm
 import logging
+import matplotlib.pyplot as plt
 
 
 
@@ -27,7 +29,6 @@ class Diffusion(object):
         self.noise_steps = noise_steps
         self.beta_start = beta_start
         self.beta_end = beta_end
-        self.device = device
         self.img_size = img_size
         self.device = device
 
@@ -38,12 +39,20 @@ class Diffusion(object):
     def prepare_noise_schedule(self):
         return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
 
+    def prepare_cosine_noise_schedule(self,s):
+        t= torch.linspace(0, self.noise_steps-1, self.noise_steps)
+        f_t = torch.cos((((t/self.noise_steps)+s)/(1+s))*(torch.pi/2))**2
+        alpha_hat_t = f_t/f_t[0]
+        beta = 1 - (alpha_hat_t[1:]/alpha_hat_t[:-1])
+        return beta
+
+
     def noise_images(self, x: torch.Tensor, t: int) -> torch.Tensor:
         sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
         sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[
             :, None, None, None
         ]
-        epsilon = torch.rand_like(x)
+        epsilon = torch.randn_like(x)
         return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * epsilon , epsilon
 
     def sample_timesteps(self, n):
@@ -61,7 +70,7 @@ class Diffusion(object):
                 alpha_hat = self.alpha_hat[t][:, None, None, None]
                 beta = self.beta[t][:, None, None, None]
                 if i > 1:
-                    noise = torch.rand_like(x)
+                    noise = torch.randn_like(x)
                 else:
                     noise = torch.zeros_like(x)
 
@@ -71,11 +80,22 @@ class Diffusion(object):
                     * (x - ((1 - alpha) / torch.sqrt(1 - alpha_hat)) * predicted_noise)
                     + torch.sqrt(beta) * noise
                 )
+                '''
+                x_aux = (x.clamp(-1, 1) + 1) / 2
+                x_aux = (x_aux * 255).type(torch.uint8)
+                x_aux = x_aux.squeeze(0)
+                x_aux = x_aux.permute(1,2,0)
+                plt.imshow(x_aux.to('cpu'))
+                plt.show()
+                '''
         model.train()
         x = (x.clamp(-1, 1) + 1) / 2
         x = (x * 255).type(torch.uint8)
+        
         return x
     
 
 
 
+
+# %%
