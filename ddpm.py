@@ -9,7 +9,6 @@ import logging
 import matplotlib.pyplot as plt
 
 
-
 logging.basicConfig(
     format="%(asctime)s %(levelname)s: %(message)s",
     level=logging.INFO,
@@ -24,61 +23,75 @@ class Diffusion(object):
         beta_start=1e-4,
         beta_end=1e-2,
         img_size=64,
+        resample_steps = 25,
         schedule_name="linear",
         device="cuda",
     ):
 
         self.noise_steps = noise_steps
+        self.resample_steps = resample_steps
         self.beta_start = beta_start
         self.beta_end = beta_end
         self.img_size = img_size
         self.device = device
-        self.schedule_name=schedule_name
+        self.schedule_name = schedule_name
 
         # define schedule
         self.betas = self.get_beta_schedule().to(device)
-        # Define alphas 
+        # Define alphas
         self.alphas = 1 - self.betas
         self.alphas_cumprod = torch.cumprod(self.alphas, axis=0)
         self.alphas_cumprod_prev = F.pad(self.alphas_cumprod[:-1], (1, 0), value=1.0)
         # calculations for posterior q(x_{t-1} | x_t, x_0)
-        self.posterior_variance = self.betas * (1. - self.alphas_cumprod_prev) / (1. - self.alphas_cumprod)
-   
+        self.posterior_variance = (
+            self.betas * (1.0 - self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
+        )
+
     def get_beta_schedule(self):
         if self.schedule_name == "linear":
             return self.linear_noise_schedule()
-        else :
+        else:
             return self.cosine_noise_schedule()
 
     def linear_noise_schedule(self):
         return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
 
-    def cosine_noise_schedule(self,s=0.008):
-        t= torch.linspace(0, self.noise_steps-1, self.noise_steps)
-        f_t = torch.cos((((t/self.noise_steps)+s)/(1+s))*(torch.pi/2))**2
-        alphas_cumprod = f_t/f_t[0]
-        betas = 1 - (alphas_cumprod[1:]/alphas_cumprod[:-1])
-        return torch.clip(betas,0.0001,0.9999)
-
+    def cosine_noise_schedule(self, s=0.008):
+        t = torch.linspace(0, self.noise_steps - 1, self.noise_steps)
+        f_t = torch.cos((((t / self.noise_steps) + s) / (1 + s)) * (torch.pi / 2)) ** 2
+        alphas_cumprod = f_t / f_t[0]
+        betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+        return torch.clip(betas, 0.0001, 0.9999)
 
     def noise_images(self, x: torch.Tensor, t: int) -> torch.Tensor:
         epsilon = torch.randn_like(x)
-        return torch.sqrt(self.alphas_cumprod[t])[:,None,None,None] * x + torch.sqrt(1 - self.alphas_cumprod[t])[:,None,None,None] * epsilon , epsilon
+        return (
+            torch.sqrt(self.alphas_cumprod[t])[:, None, None, None] * x
+            + torch.sqrt(1 - self.alphas_cumprod[t])[:, None, None, None] * epsilon,
+            epsilon,
+        )
 
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
-    def sample(self, model, n):
+    def sample(self, model, n, labels=None, cfg_scale=3):
         logging.info(f"Sampling {n} new images....")
         model.eval()
+        if labels is not None:
+                    labels = labels.to(self.device)
         with torch.no_grad():
             x = torch.randn(n, 3, self.img_size, self.img_size).to(self.device)
             for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
                 t = (torch.ones(n) * i).long().to(self.device)
-                predicted_noise = model(x, t)
-                alpha = self.alphas[t][:,None,None,None]
-                alpha_cumprod = self.alphas_cumprod[t][:,None,None,None]
-                beta = self.betas[t][:,None,None,None]
+
+                predicted_noise = model(x, t, labels)
+                if cfg_scale > 0  :
+                    uncond_predicted_noise = model(x,t, None)
+                    predicted_noise = torch.lerp(uncond_predicted_noise, predicted_noise, cfg_scale)
+
+                alpha = self.alphas[t][:, None, None, None]
+                alpha_cumprod = self.alphas_cumprod[t][:, None, None, None]
+                beta = self.betas[t][:, None, None, None]
                 if i > 1:
                     noise = torch.randn_like(x)
                 else:
@@ -87,25 +100,67 @@ class Diffusion(object):
                 x = (
                     1
                     / torch.sqrt(alpha)
-                    * (x - ((1 - alpha) / torch.sqrt(1 - alpha_cumprod)) * predicted_noise)
+                    * (
+                        x
+                        - ((1 - alpha) / torch.sqrt(1 - alpha_cumprod))
+                        * predicted_noise
+                    )
                     + torch.sqrt(beta) * noise
                 )
-                '''
+                """
                 x_aux = (x.clamp(-1, 1) + 1) / 2
                 x_aux = (x_aux * 255).type(torch.uint8)
                 x_aux = x_aux.squeeze(0)
                 x_aux = x_aux.permute(1,2,0)
                 plt.imshow(x_aux.to('cpu'))
                 plt.show()
-                '''
+                """
         model.train()
         x = (x.clamp(-1, 1) + 1) / 2
         x = (x * 255).type(torch.uint8)
-        
+
         return x
-    
 
+    def inpaint(self, model, x_0, mask, n, labels=None, cfg_scale=3):
+        logging.info(f"Inpainting {n} new images....")
+        model.eval()
+        if labels is not None:
+                    labels = labels.to(self.device)
+        with torch.no_grad():
+            x = torch.randn(n, 3, self.img_size, self.img_size).to(self.device)
+            for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
+                for u in range(0, self.resample_steps):
+                    t = (torch.ones(n) * i).long().to(self.device)
 
+                    predicted_noise = model(x, t, labels)
+
+                    if cfg_scale > 0  :
+                        uncond_predicted_noise = model(x,t, None)
+                        predicted_noise = torch.lerp(uncond_predicted_noise, predicted_noise, cfg_scale)
+
+                    alpha = self.alphas[t][:, None, None, None]
+                    alpha_cumprod = self.alphas_cumprod[t][:, None, None, None]
+                    beta = self.betas[t][:, None, None, None]
+                    if i > 1:
+                        noise = torch.randn_like(x)
+                    else:
+                        noise = torch.zeros_like(x)
+
+                    x_known, _ =  self.noise_images(x_0,t)
+
+                    x_unknown = (1/torch.sqrt(alpha))* (x- ((1 - alpha) / torch.sqrt(1 - alpha_cumprod))* predicted_noise)+ torch.sqrt(beta) * noise
+                    
+
+                    x = torch.mul(mask,x_known) + torch.mul(torch.ones_like(mask)-mask,x_unknown) 
+                    if u < self.resample_steps and i>1 :
+                        x = torch.sqrt(alpha) * x + noise * torch.sqrt(beta) 
+                                
+                
+        model.train()
+        x = (x.clamp(-1, 1) + 1) / 2
+        x = (x * 255).type(torch.uint8)
+
+        return x
 
 
 # %%
