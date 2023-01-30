@@ -1,0 +1,15 @@
+epochs: 2401
+saving_interval: 100
+device: 'cuda'
+batch_size: 64
+img_size: 64
+run_name: "aloha"
+lr: 3e-3
+dataset_path: '../datasets/airplane-dataset-trans'
+scheduler: 'linear'
+ema: True
+cfg: False
+resume_ckpt: null
+classes_to_focus_on: ['C-130_Hercules']
+accumulation_steps: 1
+amp: True

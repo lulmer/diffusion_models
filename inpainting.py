@@ -14,7 +14,7 @@ device = "cuda"
 img_size = 64
 nb_imgs = 6 
 
-PATH = os.path.join("models","airplanes_foolish_lion5","ckpt12000.pt")
+PATH = os.path.join("models","airplanes_foolish_lion5","ema_ckpt12000.pt")
 enable_cfg = True
 
 args = Namespace(**{
@@ -45,27 +45,37 @@ label_count = {idx_to_label[idx]:val for idx,val in dico.items() }
 def create_squared_mask(coordinates, length, img_size):
     start_x, start_y = coordinates
     padding = length
-    mask = torch.ones((img_size,img_size))
+    mask = torch.ones((img_size,img_size),dtype=torch.int8)
     mask[start_x:start_x+padding,start_y:start_y+padding]=0
     return mask
-mask = create_squared_mask((15,15),38,img_size)
+mask = create_squared_mask((30,0),32,img_size)
 plt.imshow(mask)
 # %%
 im,label = dl.dataset[90]
 print(im.shape)
 print(label)
-plt.imshow(im.permute(1,2,0))
-plt.imshow(torch.mul(mask,im).permute(1,2,0))
+fig,ax = plt.subplots(1,2)
+ax[0].imshow(im.permute(1,2,0))
+ax[1].imshow(torch.mul(mask,im).permute(1,2,0))
+plt.show()
+
 # %%
 import torchvision
 img_p = "../datasets/airplane-dataset-trans/Airliner/0-24.jpg"
+img_p = "../datasets/airplane-dataset-trans/C-130_Hercules/5-170.jpg"
+img_p = "../datasets/dataset_blender/images_64/DOTA_3D_64_90.jpg"
+
 img= torchvision.transforms.functional.pil_to_tensor(Image.open(img_p))
 img= torchvision.transforms.functional.resize(img, 64)
+fig,ax = plt.subplots(1,2)
+ax[0].imshow(img.permute(1,2,0))
+ax[1].imshow(torch.mul(mask,img).permute(1,2,0))
+plt.show()
 img= torchvision.transforms.functional.normalize(img/255,[0.5,0.5,0.5],[0.5,0.5,0.5])
-plt.imshow(img.permute(1,2,0))
+
 #%%
 diffusion.resample_steps= 6
 sampled_images = diffusion.inpaint(model, n=1, x_0=img.to(device), mask=mask.to(device))
-# %%
+
 plt.imshow(sampled_images.squeeze(0).permute(1,2,0).to("cpu"))
 # %%

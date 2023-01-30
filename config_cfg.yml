@@ -1,0 +1,15 @@
+epochs: 3000
+saving_interval: 200
+device: 'cuda'
+batch_size: 64
+img_size: 64
+run_name: "all_planes"
+lr: 3e-3
+dataset_path: '../datasets/airplane-dataset-trans'
+scheduler: 'linear'
+ema: True
+cfg: True
+resume_ckpt: null
+classes_to_focus_on: null
+accumulation_steps: 2
+amp: True

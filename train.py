@@ -14,25 +14,32 @@ import numpy as np
 
 
 
+
 def train(args):
     setup_logging(args.run_name)
     device = args.device
     dataloader = get_data(args)
+
+    if args.amp:
+        print('################# amp enabled')
+        # Creates once at the beginning of training
+        scaler = torch.cuda.amp.GradScaler()
+
     if args.cfg:
         nb_labels = len(np.unique(np.array(dataloader.dataset.targets)))
-        model = UNet_conditional(image_size=args.img_size, num_classes=nb_labels).to(
+        model = UNet_conditional(image_size=args.img_size, num_classes=nb_labels, device=device).to(
             device
         )
     else:
-        model = UNet_conditional(image_size=args.img_size).to(device)
+        model = UNet_conditional(image_size=args.img_size, device=device).to(device)
 
     if args.resume_ckpt:
         print("Resuming training from a checkpoint")
         model.load_state_dict(torch.load(args.resume_ckpt))
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[3000,6000,10000], gamma=0.8)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[500,1500,2000], gamma=0.5)
     mse = nn.MSELoss()
-    diffusion = Diffusion(img_size=args.img_size, device=device)
+    diffusion = Diffusion(img_size=args.img_size, device=device, schedule_name=args.scheduler)
     logger = SummaryWriter(os.path.join("runs", args.run_name))
     l = len(dataloader)
     if args.ema:
@@ -50,25 +57,38 @@ def train(args):
             x_t, noise = diffusion.noise_images(images, t)
             if np.random.random() < 0.1 :
                 labels = None
-            predicted_noise = model(x_t, t, labels)
-            loss = mse(noise, predicted_noise)
+            if args.amp:
+                with torch.cuda.amp.autocast(dtype=torch.float16):
+                    predicted_noise = model(x_t, t, labels)
+                    loss = mse(noise, predicted_noise)
+                scaler.scale(loss).backward()
+            else:
+                predicted_noise = model(x_t, t, labels)
+                loss = mse(noise, predicted_noise)
+                loss.backward()
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
+            if (i+1) % args.accumulation_steps == 0:
+                if args.amp:
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:            # Wait for several backward step 
+                    optimizer.step()
+            
+                scheduler.step()
+                optimizer.zero_grad()
+                
             if args.ema:
                 ema.step_ema(ema_model, model)
+
             pbar.set_postfix(MSE=loss.item())
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
-        if epoch % 1000 == 0:
+        if epoch % args.saving_interval == 0:
             sampled_images = diffusion.sample(model, n=6)
             save_images(
                 sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg")
             )
             
-
             if args.cfg:
                 sampled_images = diffusion.sample(model, n=6,labels=torch.Tensor([0,0,0,2,2,2]).long())
                 save_images(
@@ -87,15 +107,17 @@ def train(args):
                 )
                 '''
                 torch.save(
-                    model.state_dict(),
+                    ema_model.state_dict(),
                     os.path.join("models", args.run_name, f"ema_ckpt{epoch}.pt"),
                 )
 
 
 if __name__ == "__main__":
-
+    import yaml
     parser = argparse.ArgumentParser(description="Train a diffusion model")
     parser.add_argument("-epochs", default=12, type=int, help="number of epochs")
+    parser.add_argument("-saving_interval", default=1, type=int, help="number of epochs")
+    
     parser.add_argument(
         "-batch_size", default=32, type=int, help="batch size of the model"
     )
@@ -142,8 +164,26 @@ if __name__ == "__main__":
         default=None,
         help="List of classes_to_focus_on",
     )
+    parser.add_argument(
+        "-accumulation_steps", type=int, default=1, help="Gradients accumulation steps you want to perform"
+    )
+    parser.add_argument(
+        "--amp",
+        action="store_true",
+        default=False,
+        help="wether apply Mixed precision training",
+    )
+    parser.add_argument("--conf", action='append', help="wether to use a config file instead of command lines")
 
     args = parser.parse_args()
+    if args.conf is not None:
+        for conf_fname in args.conf:
+            with open(conf_fname, 'r') as file:
+                config = yaml.safe_load(file)
+                parser.set_defaults(**config)
+
+    args = parser.parse_args()
+
     print(args)
 
     train(args)

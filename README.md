@@ -9,14 +9,10 @@ Welcome to the diffusion models repository
 
 # Inpainting
 
+
+
 # Features  
 
-## Classifier Free Guidance 
-
-## Exponential Moving Average
-
-## Noise Scheduler
-
-### Linear Scheduler
-
-### Noise Scheduler
+* Classifier Free Guidance 
+* Exponential Moving Average
+* Cosine, Quadratic, Linear, Noise Schedulers
