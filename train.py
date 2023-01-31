@@ -160,7 +160,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-classes_to_focus_on",
-        nargs='+',
+        action='append',
         default=None,
         help="List of classes_to_focus_on",
     )
