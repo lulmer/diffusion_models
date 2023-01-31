@@ -62,6 +62,8 @@ def get_data(args):
     dataset = torchvision.datasets.ImageFolder(args.dataset_path, transform=transforms)
 
     if args.classes_to_focus_on is not None :
+        if isinstance(args.classes_to_focus_on,str):
+            args.classes_to_focus_on=[args.classes_to_focus_on]
         dataset = CustomSubset(dataset, args.classes_to_focus_on)
 
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
