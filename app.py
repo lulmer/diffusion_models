@@ -11,8 +11,6 @@ import yaml
 import numpy as np
 import cv2 
 
-
-
 os.environ['NO_PROXY'] = "127.0.0.1"
 img_size = 64
 device='cuda'

@@ -13,8 +13,6 @@ import copy
 import numpy as np
 
 
-
-
 def train(args):
     setup_logging(args.run_name)
     device = args.device
